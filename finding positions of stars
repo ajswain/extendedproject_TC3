@@ -1,0 +1,110 @@
+import pandas as pd
+import numpy as np
+from astropy.visualization import astropy_mpl_style, quantity_support
+import astropy.units as u
+from astropy.coordinates import AltAz, EarthLocation, SkyCoord
+from astropy.time import Time
+import matplotlib.pyplot as plt
+from astropy.coordinates import get_moon
+astropy_mpl_style['axes.grid'] = False
+plt.style.use(astropy_mpl_style)
+quantity_support()
+
+#Displaying data
+data = pd.read_csv("landolt_north.csv", delimiter = "|")
+data
+
+#Position of the BPO
+latitude = 51.37283*u.deg 
+longitude = -2.319209*u.deg
+elevation = 190.0*u.m
+
+# Set location
+bath = EarthLocation(lat = latitude, lon = longitude, height = elevation)
+# Input time year-month-day
+time = Time('2023-3-5 22:00:00')
+
+# Find information about the two variable stars - RZ Ceph and RV UMa
+#RZ Ceph first:
+v1 = SkyCoord('22h40m0.51s', '+64d58m45.0s', frame = 'icrs')
+#Transform coordinates
+caltaz = v1.transform_to(AltAz(obstime=time,location=bath))
+print(f"RZ Cep's Altitude = {caltaz.alt:.2}")
+print(f"RZ Cep's Azimuthal = {caltaz.az:.2}")
+
+# RV UMa: 
+v2 = SkyCoord('13h34m12.58s', '+53d52m7.9s')
+# Transform coordinates
+daltaz = v2.transform_to(AltAz(obstime=time,location=bath))
+print(f"RV UMa's Altitude = {daltaz.alt:.2}")
+print(f"RV UMa's Azimuthal = {daltaz.az:.2}")
+
+#Remove whitespace from column heads - was formatted weirdly
+data.columns = data.columns.str.strip()
+data.columns
+
+# Converting from ra and dec to alt and az at specific time and location
+AltAzdegrees = SkyCoord(data['ra'], data['dec'], frame='icrs', unit='deg')
+a = AltAzdegrees.transform_to(AltAz(obstime=time, location=bath))
+b = a.to_string('decimal')
+data['AltAz'] = b
+# Add Az and Alt to data table for each of the standard stars
+data[['Az','Alt']] = data.AltAz.str.split(expand=True)
+data
+
+# Following plot shows the position of the RZ Ceph plotted against time
+# Change the date depending on observation. Leave the time - it plots it from midnight
+midnight = Time('2023-3-6 00:00:00') 
+delta_midnight = np.linspace(-2, 10, 100) * u.hour
+frame_Mar2night = AltAz(obstime = midnight + delta_midnight, location=bath)
+caltaz_Mar2night = caltaz.transform_to(frame_Mar2night)
+c_airmass_Mar2night = caltaz_Mar2night.secz
+plt.plot(delta_midnight, c_airmass_Mar2night) #co ordinates of cepheid plotted against time RZ CEP
+plt.xlim(-2, 2)
+plt.ylim(1, 2.5)
+plt.xlabel('Hours from Midnight')
+plt.ylabel('RV Cep [Sec(z)]')
+plt.show()
+
+#Same thing for the RV UMa
+delta_midnight = np.linspace(-2, 10, 100)*u.hour
+frame_Mar2night = AltAz(obstime=midnight+delta_midnight, location=bath)
+daltaz_Mar2night = daltaz.transform_to(frame_Mar2night)
+d_airmass_Mar2night = daltaz_Mar2night.secz
+plt.plot(delta_midnight, d_airmass_Mar2night) #co ordinates of cepheid plotted against time RV UMa
+plt.xlim(-2, 2)
+plt.ylim(1, 2)
+plt.xlabel('Hours from Midnight')
+plt.ylabel('RV UMa [Sec(z)]')
+plt.show()
+
+# Now adding the moon to each of these plots - we want to avoid nights where they're close together 
+midnight = Time('2023-3-5 00:00:00')
+delta_midnight = np.linspace(-12, 12, 100)*u.hour
+times = midnight + delta_midnight
+moon = get_moon(times)
+frame_moon = AltAz(obstime = midnight + delta_midnight, location=bath)
+moonaltazs = moon.transform_to(frame_moon)
+daltazs = daltaz.transform_to(frame_moon)
+caltazs = caltaz.transform_to(frame_moon)
+plt.plot(delta_midnight, moonaltazs.az, color='g', ls='--', label='Moon')
+plt.scatter(delta_midnight, daltazs.alt, c=daltazs.az, label='RV UMa', lw=0, s=8,
+cmap='viridis')
+plt.legend(loc='upper left')
+plt.colorbar().set_label('Azimuth [deg]')
+plt.xlim(-2*u.hour, 2*u.hour)
+plt.ylim(0*u.deg, 90*u.deg)
+plt.xlabel('Hours from Midnight')
+plt.ylabel('Altitude [deg]')
+plt.show()
+
+plt.plot(delta_midnight, moonaltazs.az, color='g', ls='--', label='Moon')
+plt.scatter(delta_midnight, caltazs.alt, c=caltazs.az, label='RZ Cep', lw=0, s=8,
+cmap='viridis')
+plt.legend(loc='lower left')
+plt.colorbar().set_label('Azimuth [deg]')
+plt.xlim(-2*u.hour, 2*u.hour)
+plt.ylim(0*u.deg, 90*u.deg)
+plt.xlabel('Hours from Midnight')
+plt.ylabel('Altitude [deg]')
+plt.show()
